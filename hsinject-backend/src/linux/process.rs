@@ -129,6 +129,75 @@ pub fn find_mapping_by_path(pid: i32, pattern: &str) -> Result<Option<MemoryMapp
     Ok(None)
 }
 
+/// Get the path to libc in the current process
+pub fn get_local_libc_path() -> Result<String> {
+    let mappings = parse_maps(std::process::id() as i32)?;
+
+    for mapping in &mappings {
+        if let Some(ref path) = mapping.path {
+            if (path.contains("libc.so") || path.contains("libc-"))
+                && mapping.perms.contains('x')
+            {
+                return Ok(path.clone());
+            }
+        }
+    }
+
+    Err(Error::LibcNotFound { pid: std::process::id() as i32 })
+}
+
+/// Resolve a symbol address in the target process
+///
+/// This works by:
+/// 1. Finding the symbol offset in our local libc
+/// 2. Finding libc base in target process
+/// 3. Adding offset to target base
+pub fn resolve_symbol_in_target(pid: i32, symbol: &str) -> Result<u64> {
+    // Get local libc info
+    let local_libc_path = get_local_libc_path()?;
+    let local_mappings = parse_maps(std::process::id() as i32)?;
+    let local_libc_base = local_mappings
+        .iter()
+        .find(|m| m.path.as_ref() == Some(&local_libc_path) && m.offset == 0)
+        .map(|m| m.start)
+        .ok_or_else(|| Error::LibcNotFound { pid: std::process::id() as i32 })?;
+
+    // Resolve symbol in local process using dlsym
+    let symbol_cstr = std::ffi::CString::new(symbol).map_err(|_| Error::SymbolNotFound {
+        symbol: symbol.to_string(),
+        library: "libc".to_string(),
+    })?;
+
+    let local_addr = unsafe {
+        let handle = libc::dlopen(std::ptr::null(), libc::RTLD_NOW);
+        if handle.is_null() {
+            return Err(Error::SymbolNotFound {
+                symbol: symbol.to_string(),
+                library: "libc".to_string(),
+            });
+        }
+        let addr = libc::dlsym(handle, symbol_cstr.as_ptr());
+        libc::dlclose(handle);
+        addr as u64
+    };
+
+    if local_addr == 0 {
+        return Err(Error::SymbolNotFound {
+            symbol: symbol.to_string(),
+            library: "libc".to_string(),
+        });
+    }
+
+    // Calculate offset
+    let offset = local_addr - local_libc_base;
+
+    // Get target libc base
+    let target_libc_base = find_libc_base(pid)?;
+
+    // Calculate target address
+    Ok(target_libc_base + offset)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,5 +222,13 @@ mod tests {
         assert_eq!(mapping.start, 0x7ffd5d200000);
         assert_eq!(mapping.perms, "rw-p");
         assert_eq!(mapping.path, None);
+    }
+
+    #[test]
+    fn test_get_local_libc_path() {
+        let path = get_local_libc_path();
+        assert!(path.is_ok());
+        let path = path.unwrap();
+        assert!(path.contains("libc"));
     }
 }
