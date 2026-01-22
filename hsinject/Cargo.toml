@@ -1,0 +1,8 @@
+[package]
+name = "hsinject"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hsinject-backend = { workspace = true }
+thiserror = { workspace = true }

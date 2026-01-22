@@ -1,0 +1,13 @@
+[package]
+name = "hsinject-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "hsinject"
+path = "src/main.rs"
+
+[dependencies]
+hsinject = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
