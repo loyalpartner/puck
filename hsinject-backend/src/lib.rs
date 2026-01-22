@@ -1,8 +1,7 @@
 //! hsinject-backend - Platform-specific injection implementation
 
 pub mod error;
+pub mod arch;
 
-// TODO: Add these modules in subsequent tasks
-// pub mod arch;
-// #[cfg(target_os = "linux")]
-// pub mod linux;
+#[cfg(target_os = "linux")]
+pub mod linux;
