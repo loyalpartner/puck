@@ -4,6 +4,7 @@ members = [
     "hsinject",
     "hsinject-backend",
     "hsinject-cli",
+    "tests/test_lib",
 ]
 
 [workspace.package]
