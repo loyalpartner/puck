@@ -1,0 +1,197 @@
+//! CLI for library injection with optional function call
+
+use std::path::PathBuf;
+
+fn print_usage(prog: &str) {
+    eprintln!("Usage: {} [OPTIONS] <pid>", prog);
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -l, --library <path>     Shared library to inject (required)");
+    eprintln!("  -f, --function <name>    Function to call after injection");
+    eprintln!("  -d, --data <string>      String data to pass to the function");
+    eprintln!("  -a, --args <arg>...      Numeric arguments for the function");
+    eprintln!("  -h, --help               Show this help");
+    eprintln!();
+    eprintln!("Examples:");
+    eprintln!("  {} -l ./payload.so 1234", prog);
+    eprintln!("  {} -l ./payload.so -f init 1234", prog);
+    eprintln!("  {} -l ./payload.so -f my_func -a 42 -a 100 1234", prog);
+    eprintln!("  {} -l ./payload.so -d \"window:0x5a00023\" 1234", prog);
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let prog = &args[0];
+
+    let mut library: Option<PathBuf> = None;
+    let mut function: Option<String> = None;
+    let mut data: Option<String> = None;
+    let mut func_args: Vec<u64> = Vec::new();
+    let mut pid: Option<i32> = None;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-h" | "--help" => {
+                print_usage(prog);
+                std::process::exit(0);
+            }
+            "-l" | "--library" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("Error: -l requires an argument");
+                    std::process::exit(1);
+                }
+                library = Some(PathBuf::from(&args[i]));
+            }
+            "-f" | "--function" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("Error: -f requires an argument");
+                    std::process::exit(1);
+                }
+                function = Some(args[i].clone());
+            }
+            "-d" | "--data" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("Error: -d requires an argument");
+                    std::process::exit(1);
+                }
+                data = Some(args[i].clone());
+            }
+            "-a" | "--args" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("Error: -a requires an argument");
+                    std::process::exit(1);
+                }
+                let arg = &args[i];
+                let val = if arg.starts_with("0x") || arg.starts_with("0X") {
+                    u64::from_str_radix(&arg[2..], 16).expect("Invalid hex argument")
+                } else {
+                    arg.parse().expect("Invalid numeric argument")
+                };
+                func_args.push(val);
+            }
+            arg if arg.starts_with('-') => {
+                eprintln!("Error: Unknown option: {}", arg);
+                print_usage(prog);
+                std::process::exit(1);
+            }
+            _ => {
+                // Positional argument: PID
+                if pid.is_some() {
+                    eprintln!("Error: Multiple PIDs specified");
+                    std::process::exit(1);
+                }
+                pid = Some(args[i].parse().expect("Invalid PID"));
+            }
+        }
+        i += 1;
+    }
+
+    // Validate required arguments
+    let library = match library {
+        Some(l) => l,
+        None => {
+            eprintln!("Error: -l/--library is required");
+            print_usage(prog);
+            std::process::exit(1);
+        }
+    };
+
+    let pid = match pid {
+        Some(p) => p,
+        None => {
+            eprintln!("Error: PID is required");
+            print_usage(prog);
+            std::process::exit(1);
+        }
+    };
+
+    // If -d is provided without -f, use a default function name "init"
+    // and pass the data as a string pointer
+    if data.is_some() && function.is_none() {
+        function = Some("init".to_string());
+    }
+
+    // Execute based on what was provided
+    if let Some(func_name) = function {
+        if let Some(data_str) = data {
+            // Inject and call function with string data
+            println!("Injecting {} into process {} and calling {}(\"{}\")",
+                     library.display(), pid, func_name, data_str);
+
+            match inject_with_string_arg(pid, &library, &func_name, &data_str) {
+                Ok(result) => {
+                    println!("Success!");
+                    println!("  handle = 0x{:x}", result.handle);
+                    println!("  {}() returned: {} (0x{:x})",
+                             func_name, result.return_value as i64, result.return_value);
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        } else if !func_args.is_empty() {
+            // Inject and call function with numeric args
+            println!("Injecting {} into process {} and calling {}({:?})",
+                     library.display(), pid, func_name, func_args);
+
+            match hsinject::inject_and_call(pid, &library, &func_name, &func_args) {
+                Ok(result) => {
+                    println!("Success!");
+                    println!("  handle = 0x{:x}", result.handle);
+                    println!("  {}() returned: {} (0x{:x})",
+                             func_name, result.return_value as i64, result.return_value);
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            // Inject and call function with no args
+            println!("Injecting {} into process {} and calling {}()",
+                     library.display(), pid, func_name);
+
+            match hsinject::inject_and_call(pid, &library, &func_name, &[]) {
+                Ok(result) => {
+                    println!("Success!");
+                    println!("  handle = 0x{:x}", result.handle);
+                    println!("  {}() returned: {} (0x{:x})",
+                             func_name, result.return_value as i64, result.return_value);
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+    } else {
+        // Just inject
+        println!("Injecting {} into process {}", library.display(), pid);
+
+        match hsinject::inject_library(pid, &library) {
+            Ok(result) => {
+                println!("Success! handle=0x{:x}", result.handle);
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+/// Inject library and call a function with a string argument
+fn inject_with_string_arg(
+    pid: i32,
+    library_path: &std::path::Path,
+    function_name: &str,
+    data: &str,
+) -> Result<hsinject::InjectionCallResult, hsinject::Error> {
+    hsinject::inject_and_call_with_string(pid, library_path, function_name, data)
+}

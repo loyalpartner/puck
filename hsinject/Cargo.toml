@@ -2,7 +2,11 @@
 name = "hsinject"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
-hsinject-backend = { workspace = true }
-thiserror = { workspace = true }
+nix.workspace = true
+libc.workspace = true
+thiserror.workspace = true
+goblin.workspace = true
+memmap2.workspace = true

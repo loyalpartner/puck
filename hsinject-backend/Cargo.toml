@@ -1,9 +1,0 @@
-[package]
-name = "hsinject-backend"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-nix = { workspace = true }
-libc = { workspace = true }
-thiserror = { workspace = true }
