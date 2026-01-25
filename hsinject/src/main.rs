@@ -6,17 +6,17 @@ fn print_usage(prog: &str) {
     eprintln!("Usage: {} [OPTIONS] <pid>", prog);
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -l, --library <path>     Shared library to inject (required)");
+    eprintln!("  -l, --library <path>     Shared library to inject (required for LOAD mode)");
+    eprintln!("  -c, --call <pattern>     Call function in already-loaded library (CALL mode)");
     eprintln!("  -f, --function <name>    Function to call after injection");
     eprintln!("  -d, --data <string>      String data to pass to the function");
     eprintln!("  -a, --args <arg>...      Numeric arguments for the function");
     eprintln!("  -h, --help               Show this help");
     eprintln!();
     eprintln!("Examples:");
-    eprintln!("  {} -l ./payload.so 1234", prog);
-    eprintln!("  {} -l ./payload.so -f init 1234", prog);
-    eprintln!("  {} -l ./payload.so -f my_func -a 42 -a 100 1234", prog);
-    eprintln!("  {} -l ./payload.so -d \"window:0x5a00023\" 1234", prog);
+    eprintln!("  {} -l ./payload.so -f entry 1234", prog);
+    eprintln!("  {} -l ./payload.so -f init -d \"config\" 1234", prog);
+    eprintln!("  {} -c libpayload.so -f unload 1234", prog);
 }
 
 fn main() {
@@ -24,6 +24,7 @@ fn main() {
     let prog = &args[0];
 
     let mut library: Option<PathBuf> = None;
+    let mut call_pattern: Option<String> = None;  // For CALL mode
     let mut function: Option<String> = None;
     let mut data: Option<String> = None;
     let mut func_args: Vec<u64> = Vec::new();
@@ -43,6 +44,14 @@ fn main() {
                     std::process::exit(1);
                 }
                 library = Some(PathBuf::from(&args[i]));
+            }
+            "-c" | "--call" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("Error: -c requires an argument");
+                    std::process::exit(1);
+                }
+                call_pattern = Some(args[i].clone());
             }
             "-f" | "--function" => {
                 i += 1;
@@ -92,15 +101,6 @@ fn main() {
     }
 
     // Validate required arguments
-    let library = match library {
-        Some(l) => l,
-        None => {
-            eprintln!("Error: -l/--library is required");
-            print_usage(prog);
-            std::process::exit(1);
-        }
-    };
-
     let pid = match pid {
         Some(p) => p,
         None => {
@@ -110,73 +110,84 @@ fn main() {
         }
     };
 
-    // If -d is provided without -f, use a default function name "init"
-    // and pass the data as a string pointer
-    if data.is_some() && function.is_none() {
-        function = Some("init".to_string());
+    // Handle CALL mode (call function in already-loaded library)
+    if let Some(pattern) = call_pattern {
+        let func_name = match function {
+            Some(f) => f,
+            None => {
+                eprintln!("Error: -f/--function is required for CALL mode");
+                std::process::exit(1);
+            }
+        };
+
+        println!("Calling {}() in library matching '{}' in process {}",
+                 func_name, pattern, pid);
+
+        match hsinject::call_in_loaded_library(pid, &pattern, &func_name, data.as_deref()) {
+            Ok(()) => {
+                println!("Success!");
+                println!("  {}() started in new thread", func_name);
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        return;
     }
 
+    // LOAD mode: require library path
+    let library = match library {
+        Some(l) => l,
+        None => {
+            eprintln!("Error: -l/--library or -c/--call is required");
+            print_usage(prog);
+            std::process::exit(1);
+        }
+    };
+
+    // If -d is provided without -f, use a default function name "entry"
+    if data.is_some() && function.is_none() {
+        function = Some("entry".to_string());
+    }
+
+    // Require function name for LOAD mode
+    let func_name = match function {
+        Some(f) => f,
+        None => {
+            eprintln!("Error: -f/--function is required");
+            print_usage(prog);
+            std::process::exit(1);
+        }
+    };
+
     // Execute based on what was provided
-    if let Some(func_name) = function {
-        if let Some(data_str) = data {
-            // Inject and call function with string data
-            println!("Injecting {} into process {} and calling {}(\"{}\")",
-                     library.display(), pid, func_name, data_str);
+    if let Some(data_str) = data {
+        // Inject and call function with string data
+        println!("Injecting {} into process {} and calling {}(\"{}\")",
+                 library.display(), pid, func_name, data_str);
 
-            match inject_with_string_arg(pid, &library, &func_name, &data_str) {
-                Ok(result) => {
-                    println!("Success!");
-                    println!("  handle = 0x{:x}", result.handle);
-                    println!("  {}() returned: {} (0x{:x})",
-                             func_name, result.return_value as i64, result.return_value);
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
+        match inject_with_string_arg(pid, &library, &func_name, &data_str) {
+            Ok(result) => {
+                println!("Success!");
+                println!("  handle = 0x{:x}", result.handle);
+                println!("  {}() started in new thread", func_name);
             }
-        } else if !func_args.is_empty() {
-            // Inject and call function with numeric args
-            println!("Injecting {} into process {} and calling {}({:?})",
-                     library.display(), pid, func_name, func_args);
-
-            match hsinject::inject_and_call(pid, &library, &func_name, &func_args) {
-                Ok(result) => {
-                    println!("Success!");
-                    println!("  handle = 0x{:x}", result.handle);
-                    println!("  {}() returned: {} (0x{:x})",
-                             func_name, result.return_value as i64, result.return_value);
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
-            }
-        } else {
-            // Inject and call function with no args
-            println!("Injecting {} into process {} and calling {}()",
-                     library.display(), pid, func_name);
-
-            match hsinject::inject_and_call(pid, &library, &func_name, &[]) {
-                Ok(result) => {
-                    println!("Success!");
-                    println!("  handle = 0x{:x}", result.handle);
-                    println!("  {}() returned: {} (0x{:x})",
-                             func_name, result.return_value as i64, result.return_value);
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
             }
         }
     } else {
-        // Just inject
-        println!("Injecting {} into process {}", library.display(), pid);
+        // Inject and call function with no args or numeric args
+        println!("Injecting {} into process {} and calling {}()",
+                 library.display(), pid, func_name);
 
-        match hsinject::inject_library(pid, &library) {
+        match hsinject::inject_and_call(pid, &library, &func_name, &func_args) {
             Ok(result) => {
-                println!("Success! handle=0x{:x}", result.handle);
+                println!("Success!");
+                println!("  handle = 0x{:x}", result.handle);
+                println!("  {}() started in new thread", func_name);
             }
             Err(e) => {
                 eprintln!("Error: {}", e);

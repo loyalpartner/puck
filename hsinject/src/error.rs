@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use nix::errno::Errno;
 use thiserror::Error;
 
+use crate::bootstrap::BootstrapStatus;
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to attach to process {pid}: {source}")]
@@ -41,6 +43,12 @@ pub enum Error {
 
     #[error("elf parse error: {0}")]
     ElfParse(String),
+
+    #[error("bootstrap failed ({status:?}): {message}")]
+    BootstrapFailed {
+        status: BootstrapStatus,
+        message: String,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

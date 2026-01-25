@@ -1,2 +1,7 @@
 /target
 /frida-core
+
+# Bootstrapper build artifacts
+/bootstrapper/*.o
+/bootstrapper/*.elf
+/bootstrapper/*.bin

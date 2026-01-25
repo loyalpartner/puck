@@ -1,8 +1,6 @@
-//! Remote function call and syscall injection for process manipulation
+//! Remote syscall injection for process manipulation
 //!
-//! This module provides two main capabilities:
-//! 1. `remote_syscall` - Execute syscalls in a target process via ptrace
-//! 2. `remote_call_with_shellcode` - Call functions by injecting shellcode into executable memory
+//! This module provides syscall execution in a target process via ptrace.
 
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
@@ -11,93 +9,8 @@ use nix::sys::wait::{waitpid, WaitStatus};
 use crate::error::{Error, Result};
 use crate::ptrace::TracedProcess;
 
-/// Size of the red zone on x86_64 (128 bytes)
-const RED_ZONE_SIZE: u64 = 128;
-
-/// Stack alignment requirement (16 bytes)
-const STACK_ALIGNMENT: u64 = 16;
-
-/// Call a function in the remote process using shellcode injection
-///
-/// Instead of manipulating registers to call functions directly (which can have
-/// issues with CET, TLS, etc.), we inject shellcode into executable memory
-/// that performs the call and traps.
-///
-/// # Arguments
-/// * `proc` - The traced process
-/// * `func_addr` - Address of the function to call
-/// * `args` - Function arguments (up to 6 for x86_64 ABI)
-/// * `code_addr` - Address of executable memory to write shellcode
-///
-/// # Returns
-/// The return value (RAX) of the called function
-/// Call a function using shellcode with a custom stack
-///
-/// # Arguments
-/// * `proc` - The traced process
-/// * `func_addr` - Address of the function to call
-/// * `args` - Function arguments (up to 6)
-/// * `code_addr` - Address of executable memory for shellcode
-/// * `stack_addr` - Optional custom stack address (top of stack region)
-pub fn remote_call_with_shellcode(
-    proc: &TracedProcess,
-    func_addr: u64,
-    args: &[u64],
-    code_addr: u64,
-) -> Result<u64> {
-    remote_call_with_shellcode_and_stack(proc, func_addr, args, code_addr, None)
-}
-
-/// Call a function using shellcode with optional custom stack
-pub fn remote_call_with_shellcode_and_stack(
-    proc: &TracedProcess,
-    func_addr: u64,
-    args: &[u64],
-    code_addr: u64,
-    stack_top: Option<u64>,
-) -> Result<u64> {
-    let shellcode = build_call_shellcode(func_addr, args);
-    proc.write_memory(code_addr, &shellcode)?;
-
-    let mut regs = proc.saved_regs;
-
-    // Use custom stack if provided, otherwise use original stack
-    if let Some(stack) = stack_top {
-        // Use provided stack, align to 16 bytes
-        regs.rsp = stack & !(STACK_ALIGNMENT - 1);
-    } else {
-        // Use original stack with red zone
-        regs.rsp -= RED_ZONE_SIZE;
-        regs.rsp &= !(STACK_ALIGNMENT - 1);
-    }
-
-    regs.rip = code_addr;
-    regs.orig_rax = u64::MAX;
-
-    proc.setregs(regs)?;
-    ptrace::cont(proc.pid, None).map_err(Error::Ptrace)?;
-
-    match waitpid(proc.pid, None) {
-        Ok(WaitStatus::Stopped(_, Signal::SIGTRAP)) => {
-            let result_regs = proc.getregs()?;
-            proc.setregs(proc.saved_regs)?;
-            Ok(result_regs.rax)
-        }
-        Ok(WaitStatus::Stopped(_, sig)) => {
-            proc.setregs(proc.saved_regs)?;
-            Err(Error::ProcessCrashed { signal: sig as i32 })
-        }
-        Ok(WaitStatus::Signaled(_, sig, _)) => {
-            Err(Error::ProcessCrashed { signal: sig as i32 })
-        }
-        Ok(status) => {
-            Err(Error::UnexpectedWaitStatus(format!("{:?}", status).len() as i32))
-        }
-        Err(e) => Err(Error::Ptrace(e)),
-    }
-}
-
 /// Build x86_64 shellcode to call a function
+#[allow(dead_code)]
 fn build_call_shellcode(func_addr: u64, args: &[u64]) -> Vec<u8> {
     let mut code = Vec::new();
 
