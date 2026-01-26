@@ -1,6 +1,6 @@
 [package]
 name = "puck-cli"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 
@@ -9,4 +9,4 @@ name = "puck"
 path = "src/main.rs"
 
 [dependencies]
-puck = { path = "../puck" }
+puck = { path = "../puck", version = "0.1.0" }
