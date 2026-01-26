@@ -15,12 +15,10 @@ make build                    # cargo build --release + bootstrapper
 # Build for aarch64
 make build-aarch64            # cross-compile for aarch64
 
-# Run QEMU integration tests
+# Run QEMU tests
+make test                     # alias for test-x86_64
 make test-x86_64              # builds labrats/payloads, runs pytest
 make test-aarch64             # same for aarch64
-
-# Run local integration tests (requires sudo)
-make test                     # builds + sudo uv run pytest tests/integration
 
 # Setup QEMU VM images (one-time)
 make setup
@@ -29,11 +27,8 @@ make setup
 ### Running Individual Tests
 
 ```bash
-# Single QEMU test
+# Single test
 uv run pytest tests/qemu/test_qemu_injection.py::test_inject_library -v --arch x86_64
-
-# Single integration test (requires sudo)
-sudo uv run pytest tests/integration/test_injection.py::test_name -v
 ```
 
 ## Architecture

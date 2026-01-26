@@ -21,9 +21,7 @@ zigbuild-aarch64:
 	$(MAKE) -C bootstrapper ARCH=aarch64
 
 # Test
-test: build
-	$(MAKE) -C tests/integration
-	sudo uv run pytest tests/integration -v
+test: test-x86_64
 
 test-x86_64: build
 	$(MAKE) -C tests/qemu/labrats all-x86_64
@@ -46,7 +44,6 @@ clean:
 	$(MAKE) -C bootstrapper clean
 	$(MAKE) -C tests/qemu/labrats clean
 	$(MAKE) -C tests/qemu/payloads clean
-	$(MAKE) -C tests/integration clean 2>/dev/null || true
 
 # Help
 help:
@@ -54,7 +51,7 @@ help:
 	@echo "make build-aarch64   - Build for aarch64"
 	@echo "make zigbuild        - Build for x86_64 (glibc 2.28+)"
 	@echo "make zigbuild-aarch64 - Build for aarch64 (glibc 2.28+)"
-	@echo "make test            - Run integration tests (sudo)"
+	@echo "make test            - Run QEMU tests (alias for test-x86_64)"
 	@echo "make test-x86_64     - Run QEMU tests for x86_64"
 	@echo "make test-aarch64    - Run QEMU tests for aarch64"
 	@echo "make setup           - Download VM images"
