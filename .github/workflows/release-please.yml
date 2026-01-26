@@ -63,8 +63,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Publish puck (library)
-        run: cargo publish --package puck
+      - name: Publish puck-rs (library)
+        run: cargo publish --package puck-rs
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       - name: Wait for crates.io index
