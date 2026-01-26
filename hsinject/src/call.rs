@@ -1,6 +1,7 @@
 //! Remote syscall injection for process manipulation
 //!
 //! This module provides syscall execution in a target process via ptrace.
+//! Supports x86_64 and aarch64 architectures.
 
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
@@ -9,38 +10,15 @@ use nix::sys::wait::{waitpid, WaitStatus};
 use crate::error::{Error, Result};
 use crate::ptrace::TracedProcess;
 
-/// Build x86_64 shellcode to call a function
-#[allow(dead_code)]
-fn build_call_shellcode(func_addr: u64, args: &[u64]) -> Vec<u8> {
-    let mut code = Vec::new();
+/// Syscall numbers (architecture-specific)
+#[cfg(target_arch = "x86_64")]
+mod syscall_nr {
+    pub const MMAP: u64 = 9;
+}
 
-    // x86_64 calling convention: rdi, rsi, rdx, rcx, r8, r9
-    // REX.W prefix + movabs opcode for each register
-    const REG_OPCODES: &[[u8; 2]] = &[
-        [0x48, 0xbf], // mov rdi, imm64
-        [0x48, 0xbe], // mov rsi, imm64
-        [0x48, 0xba], // mov rdx, imm64
-        [0x48, 0xb9], // mov rcx, imm64
-        [0x49, 0xb8], // mov r8, imm64
-        [0x49, 0xb9], // mov r9, imm64
-    ];
-
-    for (i, &arg) in args.iter().take(6).enumerate() {
-        code.extend_from_slice(&REG_OPCODES[i]);
-        code.extend_from_slice(&arg.to_le_bytes());
-    }
-
-    // mov rax, func_addr
-    code.extend_from_slice(&[0x48, 0xb8]);
-    code.extend_from_slice(&func_addr.to_le_bytes());
-
-    // call rax
-    code.extend_from_slice(&[0xff, 0xd0]);
-
-    // int3 (trap to return control)
-    code.push(0xcc);
-
-    code
+#[cfg(target_arch = "aarch64")]
+mod syscall_nr {
+    pub const MMAP: u64 = 222;
 }
 
 /// Perform a syscall in the remote process using ptrace register injection
@@ -50,36 +28,59 @@ fn build_call_shellcode(func_addr: u64, args: &[u64]) -> Vec<u8> {
 ///
 /// # Arguments
 /// * `proc` - The traced process
-/// * `syscall_num` - The syscall number (e.g., 9 for mmap)
+/// * `syscall_num` - The syscall number
 /// * `args` - Syscall arguments (up to 6)
 ///
 /// # Returns
-/// The return value (RAX) of the syscall
+/// The return value of the syscall
 pub fn remote_syscall(proc: &TracedProcess, syscall_num: u64, args: &[u64]) -> Result<u64> {
     // Set up registers for the syscall
     let mut regs = proc.saved_regs;
-    regs.rax = syscall_num;
-    regs.orig_rax = syscall_num;
 
-    // Set arguments: rdi, rsi, rdx, r10, r8, r9
-    // Note: syscall uses r10 instead of rcx for 4th argument
-    let reg_refs: [&mut u64; 6] = [
-        &mut regs.rdi,
-        &mut regs.rsi,
-        &mut regs.rdx,
-        &mut regs.r10,
-        &mut regs.r8,
-        &mut regs.r9,
-    ];
+    #[cfg(target_arch = "x86_64")]
+    {
+        regs.rax = syscall_num;
+        regs.orig_rax = syscall_num;
 
-    for (reg, &arg) in reg_refs.into_iter().zip(args.iter()) {
-        *reg = arg;
+        // Set arguments: rdi, rsi, rdx, r10, r8, r9
+        // Note: syscall uses r10 instead of rcx for 4th argument
+        let reg_refs: [&mut u64; 6] = [
+            &mut regs.rdi,
+            &mut regs.rsi,
+            &mut regs.rdx,
+            &mut regs.r10,
+            &mut regs.r8,
+            &mut regs.r9,
+        ];
+
+        for (reg, &arg) in reg_refs.into_iter().zip(args.iter()) {
+            *reg = arg;
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        regs.regs[8] = syscall_num; // x8 = syscall number
+
+        // Set arguments: x0-x5
+        for (i, &arg) in args.iter().take(6).enumerate() {
+            regs.regs[i] = arg;
+        }
     }
 
     // Find syscall instruction in existing executable memory
     let syscall_addr = find_syscall_instruction(proc.pid.as_raw())?;
 
-    regs.rip = syscall_addr;
+    #[cfg(target_arch = "x86_64")]
+    {
+        regs.rip = syscall_addr;
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        regs.pc = syscall_addr;
+    }
+
     proc.setregs(regs)?;
 
     // Single step to execute the syscall instruction
@@ -92,7 +93,15 @@ pub fn remote_syscall(proc: &TracedProcess, syscall_num: u64, args: &[u64]) -> R
             // Restore original registers
             proc.setregs(proc.saved_regs)?;
 
-            Ok(result_regs.rax)
+            #[cfg(target_arch = "x86_64")]
+            {
+                Ok(result_regs.rax)
+            }
+
+            #[cfg(target_arch = "aarch64")]
+            {
+                Ok(result_regs.regs[0])
+            }
         }
         Ok(WaitStatus::Stopped(_, sig)) => {
             proc.setregs(proc.saved_regs)?;
@@ -115,13 +124,20 @@ fn find_syscall_instruction(pid: i32) -> Result<u64> {
 
     let mappings = parse_maps(pid)?;
 
-    // Helper to scan a mapping for syscall instruction (0x0f 0x05)
+    // Syscall instruction bytes (architecture-specific)
+    #[cfg(target_arch = "x86_64")]
+    const SYSCALL_BYTES: &[u8] = &[0x0f, 0x05]; // syscall
+
+    #[cfg(target_arch = "aarch64")]
+    const SYSCALL_BYTES: &[u8] = &[0x01, 0x00, 0x00, 0xd4]; // svc #0 (little-endian)
+
+    // Helper to scan a mapping for syscall instruction
     let scan_for_syscall = |mapping: &MemoryMapping| -> Option<u64> {
         let scan_size = std::cmp::min(4096, (mapping.end - mapping.start) as usize);
         let data = read_process_memory(pid, mapping.start, scan_size).ok()?;
 
-        data.windows(2)
-            .position(|w| w == [0x0f, 0x05])
+        data.windows(SYSCALL_BYTES.len())
+            .position(|w| w == SYSCALL_BYTES)
             .map(|i| mapping.start + i as u64)
     };
 
@@ -179,7 +195,6 @@ fn read_process_memory(pid: i32, addr: u64, len: usize) -> Result<Vec<u8>> {
 
 /// Allocate memory in target process using mmap syscall
 pub fn remote_mmap(proc: &TracedProcess, size: u64) -> Result<u64> {
-    // SYS_mmap = 9
     // mmap(addr=0, length=size, prot=PROT_READ|PROT_WRITE|PROT_EXEC, flags=MAP_PRIVATE|MAP_ANONYMOUS, fd=-1, offset=0)
     let args = [
         0u64,        // addr = NULL
@@ -190,7 +205,7 @@ pub fn remote_mmap(proc: &TracedProcess, size: u64) -> Result<u64> {
         0u64,        // offset = 0
     ];
 
-    let result = remote_syscall(proc, 9, &args)?;
+    let result = remote_syscall(proc, syscall_nr::MMAP, &args)?;
 
     // Check for MAP_FAILED (-1)
     if result == u64::MAX {

@@ -5,7 +5,8 @@
  * 2. Creates a new thread that loads library and calls function
  * 3. All dlopen/dlsym happen in the new thread (single reference)
  *
- * x86_64 Linux / glibc only
+ * Supported architectures: x86_64, aarch64
+ * Linux / glibc only
  */
 
 #include "bootstrapper.h"
@@ -14,15 +15,30 @@
 
 #include <sys/syscall.h>
 
-/* x86_64 syscall numbers */
-#ifndef __NR_read
-#define __NR_read 0
-#endif
-#ifndef __NR_open
-#define __NR_open 2
-#endif
-#ifndef __NR_close
-#define __NR_close 3
+/* Syscall numbers - architecture specific */
+#if defined(__x86_64__)
+#  ifndef __NR_read
+#    define __NR_read 0
+#  endif
+#  ifndef __NR_open
+#    define __NR_open 2
+#  endif
+#  ifndef __NR_close
+#    define __NR_close 3
+#  endif
+#elif defined(__aarch64__)
+#  ifndef __NR_read
+#    define __NR_read 63
+#  endif
+#  ifndef __NR_openat
+#    define __NR_openat 56
+#  endif
+#  ifndef __NR_close
+#    define __NR_close 57
+#  endif
+#  ifndef AT_FDCWD
+#    define AT_FDCWD -100
+#  endif
 #endif
 
 /* Function pointer types */
@@ -76,7 +92,12 @@ static int str_contains(const char *haystack, const char *needle) {
 static int parse_auxv(const Elf64_Phdr **phdr_out, size_t *phnum_out) {
     unsigned char buf[512];
 
+#if defined(__x86_64__)
     int fd = frida_syscall_3(__NR_open, (size_t)"/proc/self/auxv", O_RDONLY, 0);
+#elif defined(__aarch64__)
+    /* aarch64 uses openat instead of open */
+    int fd = frida_syscall_4(__NR_openat, AT_FDCWD, (size_t)"/proc/self/auxv", O_RDONLY, 0);
+#endif
     if (fd < 0)
         return 0;
 
@@ -264,7 +285,11 @@ static void *loader_thread(void *arg) {
 
     /* Detach this thread so it doesn't need to be joined */
     void *self;
+#if defined(__x86_64__)
     __asm__ volatile ("mov %%fs:0, %0" : "=r" (self));
+#elif defined(__aarch64__)
+    __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (self));
+#endif
     if (do_pthread_detach && self)
         do_pthread_detach(self);
 
@@ -309,7 +334,11 @@ static void *call_thread(void *arg) {
 
     /* Detach this thread */
     void *self;
+#if defined(__x86_64__)
     __asm__ volatile ("mov %%fs:0, %0" : "=r" (self));
+#elif defined(__aarch64__)
+    __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (self));
+#endif
     if (do_pthread_detach && self)
         do_pthread_detach(self);
 
@@ -418,7 +447,11 @@ uint32_t bootstrap(BootstrapContext *ctx) {
     ctx->status = BOOTSTRAP_SUCCESS;
 
     /* Trap to return control to injector */
+#if defined(__x86_64__)
     __asm__ volatile ("int3");
+#elif defined(__aarch64__)
+    __asm__ volatile ("brk #0");
+#endif
 
     return ctx->status;
 }

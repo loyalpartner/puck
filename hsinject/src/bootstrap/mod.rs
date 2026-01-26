@@ -8,6 +8,8 @@
 //! This is a Frida-style two-stage injection:
 //! - Stage 1: Bootstrap code runs in hijacked thread, resolves symbols
 //! - Stage 2: New thread does dlopen/call (clean thread context, single dlopen reference)
+//!
+//! Supported architectures: x86_64, aarch64
 
 pub mod context;
 
@@ -21,7 +23,11 @@ use crate::error::{Error, Result};
 use crate::ptrace::TracedProcess;
 
 /// Embedded bootstrapper shellcode (compiled from C bootstrapper)
+#[cfg(target_arch = "x86_64")]
 static BOOTSTRAPPER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bootstrapper-x86_64.bin"));
+
+#[cfg(target_arch = "aarch64")]
+static BOOTSTRAPPER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bootstrapper-aarch64.bin"));
 
 /// Memory layout constants
 const CODE_SIZE: u64 = 4096;
@@ -120,12 +126,23 @@ fn execute_bootstrap(
     );
     eprintln!("[debug] function: {} @ 0x{:x}", params.function_name, func_addr);
 
-    // Set up registers for execution
+    // Set up registers for execution (architecture-specific)
     let mut regs = proc.saved_regs;
-    regs.rdi = ctx_addr;
-    regs.rip = mem;
-    regs.rsp = (stack_top & !(STACK_ALIGNMENT - 1)) - 8;
-    regs.orig_rax = u64::MAX;
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        regs.rdi = ctx_addr;      // First argument
+        regs.rip = mem;           // Instruction pointer
+        regs.rsp = (stack_top & !(STACK_ALIGNMENT - 1)) - 8;
+        regs.orig_rax = u64::MAX; // Prevent syscall restart
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        regs.regs[0] = ctx_addr;  // First argument (x0)
+        regs.pc = mem;            // Program counter
+        regs.sp = stack_top & !(STACK_ALIGNMENT - 1);
+    }
 
     proc.setregs(regs)?;
     ptrace::cont(proc.pid, None).map_err(Error::Ptrace)?;
@@ -162,15 +179,30 @@ fn execute_bootstrap(
         }
         Ok(WaitStatus::Stopped(_, sig)) => {
             if let Ok(crash_regs) = ptrace::getregs(proc.pid) {
-                eprintln!(
-                    "[debug] crash at RIP=0x{:x}, RSP=0x{:x}",
-                    crash_regs.rip, crash_regs.rsp
-                );
-                eprintln!(
-                    "[debug] mem base=0x{:x}, offset=0x{:x}",
-                    mem,
-                    crash_regs.rip.wrapping_sub(mem)
-                );
+                #[cfg(target_arch = "x86_64")]
+                {
+                    eprintln!(
+                        "[debug] crash at RIP=0x{:x}, RSP=0x{:x}",
+                        crash_regs.rip, crash_regs.rsp
+                    );
+                    eprintln!(
+                        "[debug] mem base=0x{:x}, offset=0x{:x}",
+                        mem,
+                        crash_regs.rip.wrapping_sub(mem)
+                    );
+                }
+                #[cfg(target_arch = "aarch64")]
+                {
+                    eprintln!(
+                        "[debug] crash at PC=0x{:x}, SP=0x{:x}",
+                        crash_regs.pc, crash_regs.sp
+                    );
+                    eprintln!(
+                        "[debug] mem base=0x{:x}, offset=0x{:x}",
+                        mem,
+                        crash_regs.pc.wrapping_sub(mem)
+                    );
+                }
             }
             proc.setregs(proc.saved_regs)?;
             Err(Error::BootstrapFailed {

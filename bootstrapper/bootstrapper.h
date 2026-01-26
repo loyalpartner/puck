@@ -5,7 +5,8 @@
  * - Loads library and calls function in a new thread
  * - Supports calling functions in already-loaded libraries
  *
- * x86_64 Linux / glibc only
+ * Supported architectures: x86_64, aarch64
+ * Linux / glibc only
  */
 
 #ifndef BOOTSTRAPPER_H

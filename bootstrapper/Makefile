@@ -16,10 +16,12 @@ ARCH ?= x86_64
 ifeq ($(ARCH),x86_64)
     CFLAGS := $(CFLAGS_COMMON) -m64
     LDFLAGS := -m elf_x86_64
+    LINKER_SCRIPT := linker.ld
     TARGET := bootstrapper-x86_64.bin
 else ifeq ($(ARCH),x86)
     CFLAGS := $(CFLAGS_COMMON) -m32
     LDFLAGS := -m elf_i386
+    LINKER_SCRIPT := linker.ld
     TARGET := bootstrapper-x86.bin
 else ifeq ($(ARCH),aarch64)
     CC := aarch64-linux-gnu-gcc
@@ -27,13 +29,15 @@ else ifeq ($(ARCH),aarch64)
     OBJCOPY := aarch64-linux-gnu-objcopy
     CFLAGS := $(CFLAGS_COMMON)
     LDFLAGS := -m aarch64linux
-    TARGET := bootstrapper-arm64.bin
+    LINKER_SCRIPT := linker-aarch64.ld
+    TARGET := bootstrapper-aarch64.bin
 else ifeq ($(ARCH),arm)
     CC := arm-linux-gnueabihf-gcc
     LD := arm-linux-gnueabihf-ld
     OBJCOPY := arm-linux-gnueabihf-objcopy
     CFLAGS := $(CFLAGS_COMMON)
     LDFLAGS := -m armelf_linux_eabi
+    LINKER_SCRIPT := linker.ld
     TARGET := bootstrapper-arm.bin
 endif
 
@@ -75,8 +79,8 @@ $(OUT_DIR)/%.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Link object files
-$(ELF): $(OBJS) linker.ld
-	$(LD) $(LDFLAGS) -T linker.ld -o $@ $(OBJS)
+$(ELF): $(OBJS) $(LINKER_SCRIPT)
+	$(LD) $(LDFLAGS) -T $(LINKER_SCRIPT) -o $@ $(OBJS)
 
 # Extract raw binary
 $(OUT_DIR)/$(TARGET): $(ELF)
