@@ -151,12 +151,39 @@ class QemuVM:
 
     def start_background(self, cmd: str) -> str:
         """Start a command in background and return its PID reliably."""
-        # Use a unique marker to reliably parse the PID
-        marker = f"__PID_{os.urandom(4).hex()}__"
-        self.session.sendline(f"{cmd} & echo {marker}$!")
-        self.session.expect(f"{marker}(\\d+)", timeout=10)
-        pid = self.session.match.group(1)
+        # Use run_command to get PID via $! - more reliable than parsing backgrounding output
+        exit_code, output = self.run_command(f"{cmd} & sleep 0.1 && echo $!")
+        pid = output.strip().split('\n')[-1].strip()
+
+        # Verify PID is valid
+        if not pid.isdigit():
+            raise RuntimeError(f"Failed to get PID for: {cmd}, output: {output}")
+
+        # Verify process exists
+        exit_code, _ = self.run_command(f"kill -0 {pid}")
+        if exit_code != 0:
+            raise RuntimeError(f"Process {pid} not running after start")
+
         return pid
+
+    def gen_marker_path(self) -> str:
+        """Generate a unique marker file path for this injection."""
+        return f"/tmp/marker_{os.urandom(4).hex()}"
+
+    def check_marker(self, marker_path: str, expected_pid: str = None, retries: int = 5) -> tuple[bool, str]:
+        """Check if marker file exists and contains expected content.
+
+        Retries several times to handle timing issues.
+        Returns (success, content) tuple.
+        """
+        output = ""
+        for _ in range(retries):
+            exit_code, output = self.run_command(f"cat {marker_path} 2>/dev/null")
+            if exit_code == 0:
+                if expected_pid is None or f"pid={expected_pid}" in output:
+                    return True, output
+            time.sleep(0.2)
+        return False, output
 
     def sendline(self, line: str) -> None:
         """Send a line to the VM."""
