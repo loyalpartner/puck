@@ -43,7 +43,7 @@ jobs:
 
   upload-release:
     needs: [release-please, build-artifacts]
-    if: ${{ needs.release-please.outputs.releases_created }}
+    if: ${{ needs.release-please.outputs.puck_release_created == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
