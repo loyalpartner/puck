@@ -11,4 +11,4 @@ name = "puck"
 path = "src/main.rs"
 
 [dependencies]
-puck-rs = { path = "../puck", version = "0.2.0" }
+puck-rs = { path = "../puck", version = "0.3.0" }
