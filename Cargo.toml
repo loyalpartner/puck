@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["puck"]
+members = ["puck", "puck-cli"]
 
 [workspace.package]
 version = "0.1.0"

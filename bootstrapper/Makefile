@@ -47,9 +47,9 @@ SRCS := bootstrapper.c elf-parser.c syscall.c
 # Output directory (overridden by build.rs)
 OUT_DIR ?= $(CURDIR)
 
-# All intermediate files go to OUT_DIR
-OBJS := $(addprefix $(OUT_DIR)/,$(SRCS:.c=.o))
-ELF := $(OUT_DIR)/bootstrapper.elf
+# All intermediate files go to OUT_DIR with architecture suffix
+OBJS := $(addprefix $(OUT_DIR)/,$(SRCS:.c=-$(ARCH).o))
+ELF := $(OUT_DIR)/bootstrapper-$(ARCH).elf
 
 .PHONY: all clean x86_64 x86 arm64 arm all-arch info
 
@@ -73,8 +73,8 @@ all-arch: x86_64
 	@echo "Note: x86, arm, arm64 require cross-compilers"
 	@echo "Install with: apt install gcc-multilib gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf"
 
-# Compile C to object files
-$(OUT_DIR)/%.o: %.c
+# Compile C to object files (with architecture suffix)
+$(OUT_DIR)/%-$(ARCH).o: %.c
 	@mkdir -p $(OUT_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -88,7 +88,8 @@ $(OUT_DIR)/$(TARGET): $(ELF)
 	@ls -l $@ | awk '{print "Built $@ (" $$5 " bytes)"}'
 
 clean:
-	rm -f $(OUT_DIR)/*.o $(OUT_DIR)/*.elf $(OUT_DIR)/bootstrapper-*.bin
+	rm -f $(OUT_DIR)/*-x86_64.o $(OUT_DIR)/*-aarch64.o $(OUT_DIR)/*-x86.o $(OUT_DIR)/*-arm.o
+	rm -f $(OUT_DIR)/*.elf $(OUT_DIR)/bootstrapper-*.bin
 
 info:
 	@echo "ARCH=$(ARCH)"

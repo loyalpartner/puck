@@ -91,6 +91,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "puck-cli"
+version = "0.1.0"
+dependencies = [
+ "puck",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
