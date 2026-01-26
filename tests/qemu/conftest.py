@@ -1,10 +1,14 @@
 """
 Pytest configuration and fixtures for QEMU-based integration tests.
 
-This module provides fixtures for:
-- Starting/stopping QEMU VMs with pexpect
-- Building test binaries for target architectures
-- Managing virtio-9p workspace sharing
+This module provides:
+- QEMU VM management with pexpect
+- QemuExecutor implementing the Executor protocol from tests/injection/
+- Build artifacts for target architectures
+- virtio-9p workspace sharing
+
+Tests from tests/injection/ can run inside QEMU VMs by using the
+executor fixture, which will be the QemuExecutor when running QEMU tests.
 """
 
 import os
@@ -91,8 +95,11 @@ def pytest_addoption(parser):
     )
 
 
-class QemuVM:
-    """Wrapper around a QEMU VM pexpect session."""
+class QemuExecutor:
+    """Executor implementation for QEMU VMs.
+
+    Implements the Executor protocol from tests/injection/conftest.py
+    """
 
     def __init__(
         self,
@@ -142,13 +149,6 @@ class QemuVM:
 
         return exit_code, output
 
-    def mount_workspace(self) -> None:
-        """Mount the virtio-9p workspace."""
-        self.run_command("mkdir -p /workspace")
-        exit_code, _ = self.run_command("mount -t 9p workspace /workspace")
-        if exit_code != 0:
-            raise RuntimeError("Failed to mount workspace")
-
     def start_background(self, cmd: str) -> str:
         """Start a command in background and return its PID reliably."""
         # Use run_command to get PID via $! - more reliable than parsing backgrounding output
@@ -165,6 +165,10 @@ class QemuVM:
             raise RuntimeError(f"Process {pid} not running after start")
 
         return pid
+
+    def kill_process(self, pid: str) -> None:
+        """Kill a process by PID."""
+        self.run_command(f"kill {pid} 2>/dev/null || true")
 
     def gen_marker_path(self) -> str:
         """Generate a unique marker file path for this injection."""
@@ -184,6 +188,13 @@ class QemuVM:
                     return True, output
             time.sleep(0.2)
         return False, output
+
+    def mount_workspace(self) -> None:
+        """Mount the virtio-9p workspace."""
+        self.run_command("mkdir -p /workspace")
+        exit_code, _ = self.run_command("mount -t 9p workspace /workspace")
+        if exit_code != 0:
+            raise RuntimeError("Failed to mount workspace")
 
     def sendline(self, line: str) -> None:
         """Send a line to the VM."""
@@ -400,8 +411,8 @@ def _setup_workspace(arch: str) -> Path:
 
 
 @pytest.fixture(scope="session")
-def _qemu_vm_session(request, check_qemu_images) -> Generator[QemuVM, None, None]:
-    """Session-scoped QEMU VM. Starts once and is shared across all tests."""
+def _qemu_executor_session(request, check_qemu_images) -> Generator[QemuExecutor, None, None]:
+    """Session-scoped QEMU executor. Starts once and is shared across all tests."""
     # Get architecture from command line or auto-detect
     arch = request.config.getoption("--arch", default=None)
     if arch is None:
@@ -421,26 +432,75 @@ def _qemu_vm_session(request, check_qemu_images) -> Generator[QemuVM, None, None
 
     try:
         session = _start_qemu(arch, image_path, workspace)
-        vm = QemuVM(arch, session, workspace)
-        vm.wait_for_boot()
-        vm.mount_workspace()
-        yield vm
+        executor = QemuExecutor(arch, session, workspace)
+        executor.wait_for_boot()
+        executor.mount_workspace()
+        yield executor
     finally:
-        if "vm" in locals():
-            vm.shutdown()
+        if "executor" in locals():
+            executor.shutdown()
         shutil.rmtree(workspace, ignore_errors=True)
 
 
-def _cleanup_vm_processes(vm: QemuVM) -> None:
+def _cleanup_vm_processes(executor: QemuExecutor) -> None:
     """Kill all processes started from /workspace."""
-    vm.run_command("pkill -9 -f '/workspace/' 2>/dev/null || true")
+    executor.run_command("pkill -9 -f '/workspace/' 2>/dev/null || true")
     time.sleep(0.1)
 
 
 @pytest.fixture
-def qemu_vm(_qemu_vm_session) -> Generator[QemuVM, None, None]:
-    """Per-test fixture that provides the shared VM with cleanup between tests."""
-    vm = _qemu_vm_session
-    _cleanup_vm_processes(vm)
-    yield vm
-    _cleanup_vm_processes(vm)
+def qemu_executor(_qemu_executor_session) -> Generator[QemuExecutor, None, None]:
+    """Per-test fixture that provides the shared executor with cleanup between tests."""
+    executor = _qemu_executor_session
+    _cleanup_vm_processes(executor)
+    yield executor
+    _cleanup_vm_processes(executor)
+
+
+# Compatibility alias for existing code
+qemu_vm = qemu_executor
+
+
+@pytest.fixture(scope="session")
+def arch(request) -> str:
+    """Get the target architecture for QEMU tests."""
+    arch = request.config.getoption("--arch", default=None)
+    if arch is None:
+        arch = _get_host_arch()
+    return arch
+
+
+@pytest.fixture
+def executor(qemu_executor) -> QemuExecutor:
+    """Provide the QEMU executor as the executor for tests/injection/ tests."""
+    return qemu_executor
+
+
+@pytest.fixture(scope="session")
+def puck_binary(arch) -> Path:
+    """Return path to puck binary inside VM workspace."""
+    return Path("/workspace/puck")
+
+
+@pytest.fixture(scope="session")
+def payload_hello(arch) -> Path:
+    """Return path to libhello.so payload inside VM workspace."""
+    return Path("/workspace/payloads/libhello.so")
+
+
+@pytest.fixture(scope="session")
+def labrat_sleeper_pie(arch) -> Path:
+    """Return path to sleeper-pie labrat inside VM workspace."""
+    return Path("/workspace/labrats/sleeper-pie")
+
+
+@pytest.fixture(scope="session")
+def labrat_sleeper_nopie(arch) -> Path:
+    """Return path to sleeper-nopie labrat inside VM workspace."""
+    return Path("/workspace/labrats/sleeper-nopie")
+
+
+@pytest.fixture(scope="session")
+def labrat_threaded_pie(arch) -> Path:
+    """Return path to threaded-pie labrat inside VM workspace."""
+    return Path("/workspace/labrats/threaded-pie")
