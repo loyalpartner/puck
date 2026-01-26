@@ -3,6 +3,8 @@ name = "puck-cli"
 version = "0.1.2"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "CLI tool for Linux process injection"
 
 [[bin]]
 name = "puck"
