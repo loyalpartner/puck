@@ -12,8 +12,9 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      puck_release_created: ${{ steps.release.outputs['puck--release_created'] }}
+      puck_tag_name: ${{ steps.release.outputs['puck--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -22,7 +23,7 @@ jobs:
 
   build-artifacts:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.releases_created }}
     strategy:
       matrix:
         include:
@@ -42,7 +43,7 @@ jobs:
 
   upload-release:
     needs: [release-please, build-artifacts]
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.releases_created }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,13 +52,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ needs.release-please.outputs.tag_name }} \
+          gh release upload ${{ needs.release-please.outputs.puck_tag_name }} \
             puck-x86_64-unknown-linux-gnu/puck#puck-x86_64-linux \
             puck-aarch64-unknown-linux-gnu/puck#puck-aarch64-linux
 
   publish-crates:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.releases_created }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
