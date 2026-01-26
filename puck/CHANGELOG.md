@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/loyalpartner/puck/compare/v0.2.0...v0.3.0) (2026-01-26)
+
+
+### Features
+
+* add package metadata for crates.io publishing ([479e047](https://github.com/loyalpartner/puck/commit/479e047c30efb9077c1479e3acf54833de1d4d24))
+* **puck:** add keywords and categories for crates.io discoverability ([56ad0fd](https://github.com/loyalpartner/puck/commit/56ad0fd5e8035a41156d1ee19afc4e1c1240f94e))
+
+
+### Bug Fixes
+
+* **ci:** move bootstrapper into puck package for crates.io publishing ([5eda497](https://github.com/loyalpartner/puck/commit/5eda497a5172a83c96ace81d830d304a6ec5bbc5))
+* rename puck package to puck-rs for crates.io ([e314216](https://github.com/loyalpartner/puck/commit/e3142166c4b2a48e070041bb436e8be08c9d772b))
+
 ## [0.2.0](https://github.com/loyalpartner/puck/compare/v0.1.0...v0.2.0) (2026-01-26)
 
 
