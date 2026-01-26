@@ -6,9 +6,6 @@
   "packages": {
     "puck": {
       "component": "puck"
-    },
-    "puck-cli": {
-      "component": "puck-cli"
     }
   }
 }
