@@ -35,6 +35,9 @@ pub enum Error {
     #[error("mmap failed in remote process")]
     MmapFailed,
 
+    #[error("no suitable executable memory region found")]
+    NoExecutableMemory,
+
     #[error("dlopen failed for {path}")]
     DlopenFailed { path: PathBuf },
 

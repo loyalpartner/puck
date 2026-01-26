@@ -11,6 +11,7 @@ import os
 import subprocess
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Generator, Optional
 
@@ -147,6 +148,15 @@ class QemuVM:
         exit_code, _ = self.run_command("mount -t 9p workspace /workspace")
         if exit_code != 0:
             raise RuntimeError("Failed to mount workspace")
+
+    def start_background(self, cmd: str) -> str:
+        """Start a command in background and return its PID reliably."""
+        # Use a unique marker to reliably parse the PID
+        marker = f"__PID_{os.urandom(4).hex()}__"
+        self.session.sendline(f"{cmd} & echo {marker}$!")
+        self.session.expect(f"{marker}(\\d+)", timeout=10)
+        pid = self.session.match.group(1)
+        return pid
 
     def sendline(self, line: str) -> None:
         """Send a line to the VM."""
@@ -362,9 +372,9 @@ def _setup_workspace(arch: str) -> Path:
     return workspace
 
 
-@pytest.fixture
-def qemu_vm(request, check_qemu_images) -> Generator[QemuVM, None, None]:
-    """Start a QEMU VM. Architecture is determined by --arch option or auto-detected."""
+@pytest.fixture(scope="session")
+def _qemu_vm_session(request, check_qemu_images) -> Generator[QemuVM, None, None]:
+    """Session-scoped QEMU VM. Starts once and is shared across all tests."""
     # Get architecture from command line or auto-detect
     arch = request.config.getoption("--arch", default=None)
     if arch is None:
@@ -392,3 +402,18 @@ def qemu_vm(request, check_qemu_images) -> Generator[QemuVM, None, None]:
         if "vm" in locals():
             vm.shutdown()
         shutil.rmtree(workspace, ignore_errors=True)
+
+
+def _cleanup_vm_processes(vm: QemuVM) -> None:
+    """Kill all processes started from /workspace."""
+    vm.run_command("pkill -9 -f '/workspace/' 2>/dev/null || true")
+    time.sleep(0.1)
+
+
+@pytest.fixture
+def qemu_vm(_qemu_vm_session) -> Generator[QemuVM, None, None]:
+    """Per-test fixture that provides the shared VM with cleanup between tests."""
+    vm = _qemu_vm_session
+    _cleanup_vm_processes(vm)
+    yield vm
+    _cleanup_vm_processes(vm)

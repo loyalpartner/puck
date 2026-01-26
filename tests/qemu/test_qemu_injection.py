@@ -17,10 +17,7 @@ class TestInjection:
         vm = qemu_vm
 
         # Start sleeper-pie in background
-        vm.sendline("/workspace/labrats/sleeper-pie &")
-        vm.expect(r"\[\d+\]\s+(\d+)")
-        pid = vm.match.group(1)
-
+        pid = vm.start_background("/workspace/labrats/sleeper-pie")
         time.sleep(0.5)
 
         # Verify process is running
@@ -47,10 +44,7 @@ class TestInjection:
         vm = qemu_vm
 
         # Start sleeper-nopie in background
-        vm.sendline("/workspace/labrats/sleeper-nopie &")
-        vm.expect(r"\[\d+\]\s+(\d+)")
-        pid = vm.match.group(1)
-
+        pid = vm.start_background("/workspace/labrats/sleeper-nopie")
         time.sleep(0.5)
 
         # Inject
@@ -73,10 +67,7 @@ class TestInjection:
         vm = qemu_vm
 
         # Start threaded target in background
-        vm.sendline("/workspace/labrats/threaded-pie &")
-        vm.expect(r"\[\d+\]\s+(\d+)")
-        pid = vm.match.group(1)
-
+        pid = vm.start_background("/workspace/labrats/threaded-pie")
         # Give threads time to start
         time.sleep(1)
 
@@ -99,10 +90,7 @@ class TestInjection:
         """Test injection with string data argument."""
         vm = qemu_vm
 
-        vm.sendline("/workspace/labrats/sleeper-pie &")
-        vm.expect(r"\[\d+\]\s+(\d+)")
-        pid = vm.match.group(1)
-
+        pid = vm.start_background("/workspace/labrats/sleeper-pie")
         time.sleep(0.5)
 
         # Inject with data
@@ -124,10 +112,7 @@ class TestInjection:
         """Test multiple injection cycles."""
         vm = qemu_vm
 
-        vm.sendline("/workspace/labrats/sleeper-pie &")
-        vm.expect(r"\[\d+\]\s+(\d+)")
-        pid = vm.match.group(1)
-
+        pid = vm.start_background("/workspace/labrats/sleeper-pie")
         time.sleep(0.5)
 
         # Inject multiple times
@@ -149,10 +134,7 @@ class TestInjection:
         """Verify library is unloaded after entry() returns."""
         vm = qemu_vm
 
-        vm.sendline("/workspace/labrats/sleeper-pie &")
-        vm.expect(r"\[\d+\]\s+(\d+)")
-        pid = vm.match.group(1)
-
+        pid = vm.start_background("/workspace/labrats/sleeper-pie")
         time.sleep(0.5)
 
         # Verify library is not loaded initially
@@ -195,10 +177,7 @@ class TestEdgeCases:
         """Test injection with nonexistent library."""
         vm = qemu_vm
 
-        vm.sendline("/workspace/labrats/sleeper-pie &")
-        vm.expect(r"\[\d+\]\s+(\d+)")
-        pid = vm.match.group(1)
-
+        pid = vm.start_background("/workspace/labrats/sleeper-pie")
         time.sleep(0.5)
 
         # Try to inject nonexistent library
@@ -214,10 +193,7 @@ class TestEdgeCases:
         """Test injection with nonexistent function."""
         vm = qemu_vm
 
-        vm.sendline("/workspace/labrats/sleeper-pie &")
-        vm.expect(r"\[\d+\]\s+(\d+)")
-        pid = vm.match.group(1)
-
+        pid = vm.start_background("/workspace/labrats/sleeper-pie")
         time.sleep(0.5)
 
         # Try to call nonexistent function

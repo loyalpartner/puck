@@ -15,6 +15,8 @@ mod elf;
 mod ptrace;
 mod call;
 mod inject;
+mod libc_resolver;
+mod code_swap;
 
 pub use error::{Error, Result};
 pub use bootstrap::{BootstrapStatus, BootstrapMode, LibcApi};

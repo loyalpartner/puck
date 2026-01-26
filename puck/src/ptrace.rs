@@ -9,6 +9,66 @@ use std::fs;
 
 use crate::error::{Error, Result};
 
+// Platform-specific register access
+#[cfg(target_arch = "x86_64")]
+fn ptrace_getregs(pid: Pid) -> nix::Result<user_regs_struct> {
+    ptrace::getregs(pid)
+}
+
+#[cfg(target_arch = "x86_64")]
+fn ptrace_setregs(pid: Pid, regs: user_regs_struct) -> nix::Result<()> {
+    ptrace::setregs(pid, regs)
+}
+
+#[cfg(target_arch = "aarch64")]
+fn ptrace_getregs(pid: Pid) -> nix::Result<user_regs_struct> {
+    use std::mem::MaybeUninit;
+
+    let mut regs = MaybeUninit::<user_regs_struct>::uninit();
+    let mut iovec = libc::iovec {
+        iov_base: regs.as_mut_ptr() as *mut libc::c_void,
+        iov_len: std::mem::size_of::<user_regs_struct>(),
+    };
+
+    let ret = unsafe {
+        libc::ptrace(
+            libc::PTRACE_GETREGSET,
+            pid.as_raw(),
+            libc::NT_PRSTATUS,
+            &mut iovec as *mut libc::iovec,
+        )
+    };
+
+    if ret == -1 {
+        Err(nix::errno::Errno::last())
+    } else {
+        Ok(unsafe { regs.assume_init() })
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+fn ptrace_setregs(pid: Pid, regs: user_regs_struct) -> nix::Result<()> {
+    let mut iovec = libc::iovec {
+        iov_base: &regs as *const user_regs_struct as *mut libc::c_void,
+        iov_len: std::mem::size_of::<user_regs_struct>(),
+    };
+
+    let ret = unsafe {
+        libc::ptrace(
+            libc::PTRACE_SETREGSET,
+            pid.as_raw(),
+            libc::NT_PRSTATUS,
+            &mut iovec as *mut libc::iovec,
+        )
+    };
+
+    if ret == -1 {
+        Err(nix::errno::Errno::last())
+    } else {
+        Ok(())
+    }
+}
+
 pub struct TracedProcess {
     pub pid: Pid,
     pub saved_regs: user_regs_struct,
@@ -87,19 +147,19 @@ impl TracedProcess {
         }
 
         // Save original registers
-        let saved_regs = ptrace::getregs(pid).map_err(Error::Ptrace)?;
+        let saved_regs = ptrace_getregs(pid).map_err(Error::Ptrace)?;
 
         Ok(Self { pid, saved_regs, stopped_threads })
     }
 
     /// Get current registers
     pub fn getregs(&self) -> Result<user_regs_struct> {
-        ptrace::getregs(self.pid).map_err(Error::Ptrace)
+        ptrace_getregs(self.pid).map_err(Error::Ptrace)
     }
 
     /// Set registers
     pub fn setregs(&self, regs: user_regs_struct) -> Result<()> {
-        ptrace::setregs(self.pid, regs).map_err(Error::Ptrace)
+        ptrace_setregs(self.pid, regs).map_err(Error::Ptrace)
     }
 
     /// Read memory from target process
@@ -154,7 +214,7 @@ impl TracedProcess {
     /// Restore registers and detach all threads
     pub fn detach(self) -> Result<()> {
         // Restore original registers for main thread
-        ptrace::setregs(self.pid, self.saved_regs).map_err(Error::Ptrace)?;
+        ptrace_setregs(self.pid, self.saved_regs).map_err(Error::Ptrace)?;
 
         // Detach all other threads first
         for thread_pid in &self.stopped_threads {

@@ -178,7 +178,7 @@ fn execute_bootstrap(
             })
         }
         Ok(WaitStatus::Stopped(_, sig)) => {
-            if let Ok(crash_regs) = ptrace::getregs(proc.pid) {
+            if let Ok(crash_regs) = proc.getregs() {
                 #[cfg(target_arch = "x86_64")]
                 {
                     eprintln!(
