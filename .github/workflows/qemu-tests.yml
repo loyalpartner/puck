@@ -35,7 +35,7 @@ jobs:
           sudo apt-get install -y qemu-system-x86
 
       - name: Set up Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -56,7 +56,7 @@ jobs:
           key: qemu-images-debian12-x86_64
 
       - name: Build puck
-        run: cargo build --release
+        run: cargo build --release --package puck-cli
 
       - name: Build test binaries
         run: |
@@ -88,7 +88,7 @@ jobs:
             gcc-aarch64-linux-gnu
 
       - name: Set up Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-unknown-linux-gnu
 
@@ -111,7 +111,7 @@ jobs:
           key: qemu-images-debian12-aarch64
 
       - name: Build puck for aarch64
-        run: cargo build --release --target aarch64-unknown-linux-gnu
+        run: cargo build --release --package puck-cli --target aarch64-unknown-linux-gnu
 
       - name: Build test binaries for aarch64
         run: |
