@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Linux process injection library using ptrace"
+keywords = ["injection", "ptrace", "linux", "process"]
+categories = ["development-tools", "os::linux-apis"]
 
 [dependencies]
 nix.workspace = true
