@@ -23,7 +23,7 @@ jobs:
 
   build-artifacts:
     needs: release-please
-    if: ${{ needs.release-please.outputs.releases_created }}
+    if: ${{ needs.release-please.outputs.puck_release_created == 'true' }}
     strategy:
       matrix:
         include:
