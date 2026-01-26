@@ -49,8 +49,8 @@ typedef int (*pthread_create_fn)(void *thread, const void *attr,
                                   void *(*start)(void *), void *arg);
 typedef int (*pthread_detach_fn)(void *thread);
 
-/* Loader thread context */
-typedef struct {
+/* Loader thread context - must be 16-byte aligned for aarch64 ABI */
+typedef struct __attribute__((aligned(16))) {
     BootstrapContext *ctx;
     LibcApi *libc;
     RDebug *r_debug;
@@ -90,7 +90,8 @@ static int str_contains(const char *haystack, const char *needle) {
 
 /* Parse /proc/self/auxv */
 static int parse_auxv(const Elf64_Phdr **phdr_out, size_t *phnum_out) {
-    unsigned char buf[512];
+    /* Buffer must be 8-byte aligned for Elf64_auxv_t access on aarch64 */
+    unsigned char buf[512] __attribute__((aligned(8)));
 
 #if defined(__x86_64__)
     int fd = frida_syscall_3(__NR_open, (size_t)"/proc/self/auxv", O_RDONLY, 0);
@@ -197,8 +198,8 @@ static uint64_t find_libpthread(RDebug *r_debug) {
     return find_library(r_debug, "libpthread.so", "libpthread-");
 }
 
-/* Context for symbol enumeration callback */
-typedef struct {
+/* Context for symbol enumeration callback - aligned for aarch64 */
+typedef struct __attribute__((aligned(16))) {
     const char *name;
     void *result;
 } SymbolLookupCtx;

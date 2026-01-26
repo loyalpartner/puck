@@ -83,6 +83,14 @@ pub fn remote_syscall(proc: &TracedProcess, syscall_num: u64, args: &[u64]) -> R
 
     proc.setregs(regs)?;
 
+    #[cfg(target_arch = "aarch64")]
+    {
+        eprintln!("[debug] syscall setup: x8={}, x0={}, x1={}, x2={}, x3={}, x4={}, x5={}",
+            regs.regs[8], regs.regs[0], regs.regs[1], regs.regs[2],
+            regs.regs[3], regs.regs[4], regs.regs[5]);
+        eprintln!("[debug] pc=0x{:x}, sp=0x{:x}", regs.pc, regs.sp);
+    }
+
     // Single step to execute the syscall instruction
     ptrace::step(proc.pid, None).map_err(Error::Ptrace)?;
 
@@ -104,6 +112,13 @@ pub fn remote_syscall(proc: &TracedProcess, syscall_num: u64, args: &[u64]) -> R
             }
         }
         Ok(WaitStatus::Stopped(_, sig)) => {
+            #[cfg(target_arch = "aarch64")]
+            {
+                if let Ok(crash_regs) = ptrace::getregs(proc.pid) {
+                    eprintln!("[debug] crash at pc=0x{:x}, sp=0x{:x}, signal={:?}",
+                        crash_regs.pc, crash_regs.sp, sig);
+                }
+            }
             proc.setregs(proc.saved_regs)?;
             Err(Error::ProcessCrashed { signal: sig as i32 })
         }
@@ -136,9 +151,24 @@ fn find_syscall_instruction(pid: i32) -> Result<u64> {
         let scan_size = std::cmp::min(4096, (mapping.end - mapping.start) as usize);
         let data = read_process_memory(pid, mapping.start, scan_size).ok()?;
 
-        data.windows(SYSCALL_BYTES.len())
-            .position(|w| w == SYSCALL_BYTES)
-            .map(|i| mapping.start + i as u64)
+        // On aarch64, instructions must be 4-byte aligned
+        #[cfg(target_arch = "aarch64")]
+        {
+            // Check only at 4-byte aligned positions
+            for i in (0..data.len().saturating_sub(3)).step_by(4) {
+                if &data[i..i + 4] == SYSCALL_BYTES {
+                    return Some(mapping.start + i as u64);
+                }
+            }
+            None
+        }
+
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            data.windows(SYSCALL_BYTES.len())
+                .position(|w| w == SYSCALL_BYTES)
+                .map(|i| mapping.start + i as u64)
+        }
     };
 
     let is_executable = |m: &MemoryMapping| m.perms.contains('x');

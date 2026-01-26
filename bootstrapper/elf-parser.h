@@ -40,7 +40,8 @@
 typedef struct _FridaElfExportDetails FridaElfExportDetails;
 typedef bool (* FridaFoundElfSymbolFunc) (const FridaElfExportDetails * details, void * user_data);
 
-struct _FridaElfExportDetails
+/* Aligned for aarch64 pointer access */
+struct __attribute__((aligned(16))) _FridaElfExportDetails
 {
   const char * name;
   void * address;
