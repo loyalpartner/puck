@@ -12,3 +12,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 uv.lock
+
+# QEMU test build markers
+tests/qemu/.built-*
