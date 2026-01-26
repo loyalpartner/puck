@@ -5,8 +5,7 @@
   "plugins": ["cargo-workspace"],
   "packages": {
     "puck": {
-      "component": "puck",
-      "changelog-path": "../CHANGELOG.md"
+      "component": "puck"
     },
     "puck-cli": {
       "component": "puck-cli"
