@@ -123,7 +123,7 @@ fn main() {
         println!("Calling {}() in library matching '{}' in process {}",
                  func_name, pattern, pid);
 
-        match puck::call_in_loaded_library(pid, &pattern, &func_name, data.as_deref()) {
+        match puck_rs::call_in_loaded_library(pid, &pattern, &func_name, data.as_deref()) {
             Ok(()) => {
                 println!("Success!");
                 println!("  {}() started in new thread", func_name);
@@ -183,7 +183,7 @@ fn main() {
         println!("Injecting {} into process {} and calling {}()",
                  library.display(), pid, func_name);
 
-        match puck::inject_and_call(pid, &library, &func_name, &func_args) {
+        match puck_rs::inject_and_call(pid, &library, &func_name, &func_args) {
             Ok(result) => {
                 println!("Success!");
                 println!("  handle = 0x{:x}", result.handle);
@@ -203,6 +203,6 @@ fn inject_with_string_arg(
     library_path: &std::path::Path,
     function_name: &str,
     data: &str,
-) -> Result<puck::InjectionCallResult, puck::Error> {
-    puck::inject_and_call_with_string(pid, library_path, function_name, data)
+) -> Result<puck_rs::InjectionCallResult, puck_rs::Error> {
+    puck_rs::inject_and_call_with_string(pid, library_path, function_name, data)
 }
