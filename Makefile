@@ -5,20 +5,20 @@
 # Build
 build:
 	cargo build --release --package puck-cli
-	$(MAKE) -C bootstrapper
+	$(MAKE) -C puck/bootstrapper
 
 build-aarch64:
 	cargo build --release --package puck-cli --target aarch64-unknown-linux-gnu
-	$(MAKE) -C bootstrapper ARCH=aarch64
+	$(MAKE) -C puck/bootstrapper ARCH=aarch64
 
 # Zigbuild (for older glibc compatibility)
 zigbuild:
 	cargo zigbuild --release --package puck-cli --target x86_64-unknown-linux-gnu.2.28
-	$(MAKE) -C bootstrapper
+	$(MAKE) -C puck/bootstrapper
 
 zigbuild-aarch64:
 	cargo zigbuild --release --package puck-cli --target aarch64-unknown-linux-gnu.2.28
-	$(MAKE) -C bootstrapper ARCH=aarch64
+	$(MAKE) -C puck/bootstrapper ARCH=aarch64
 
 # Test
 test: test-qemu
@@ -50,7 +50,7 @@ setup:
 # Clean
 clean:
 	cargo clean
-	$(MAKE) -C bootstrapper clean
+	$(MAKE) -C puck/bootstrapper clean
 	$(MAKE) -C tests/qemu/labrats clean
 	$(MAKE) -C tests/qemu/payloads clean
 

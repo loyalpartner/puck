@@ -13,9 +13,8 @@ fn main() {
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"));
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "x86_64".to_string());
 
-    // Bootstrapper source directory (in workspace root)
-    let workspace_dir = manifest_dir.parent().expect("No parent directory");
-    let bootstrapper_dir = workspace_dir.join("bootstrapper");
+    // Bootstrapper source directory (in package directory)
+    let bootstrapper_dir = manifest_dir.join("bootstrapper");
 
     // Track changes
     println!("cargo:rerun-if-changed={}", bootstrapper_dir.display());
