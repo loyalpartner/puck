@@ -5,3 +5,10 @@
 /bootstrapper/*.o
 /bootstrapper/*.elf
 /bootstrapper/*.bin
+
+# Python/uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+uv.lock

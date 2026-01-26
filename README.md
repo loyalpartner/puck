@@ -1,85 +1,58 @@
-# hsinject
+# Puck
 
 A Rust library for Linux process injection, inspired by Frida's injection mechanism.
 
 ## Features
 
 - **Library injection**: Inject shared libraries (.so) into running processes
-- **Shellcode injection**: Inject raw shellcode
-- **Entry point support**: Call a specific function after injection
-- **x86_64 support**: Currently supports x86_64 architecture
-
-## Installation
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-hsinject = { git = "https://github.com/user/hsinject" }
-```
+- **Function calling**: Call a specific function after injection
+- **Multi-arch**: Supports x86_64 and aarch64 architectures
 
 ## Usage
-
-### As a library
-
-```rust
-use hsinject::{inject, Payload, InjectOptions};
-
-// Simple library injection
-let result = inject(
-    1234,
-    Payload::Library("/path/to/hook.so".into()),
-    InjectOptions::default(),
-)?;
-
-// With entry point
-let result = inject(
-    1234,
-    Payload::Library("/path/to/hook.so".into()),
-    InjectOptions {
-        entry_point: Some("my_init".into()),
-        argument: Some("config=debug".into()),
-    },
-)?;
-
-println!("Injected! handle=0x{:x}", result.handle);
-```
 
 ### As a CLI tool
 
 ```bash
-# Inject a shared library
-sudo hsinject -p 1234 -l ./libhook.so
+# Inject a shared library and call entry()
+sudo puck -l ./libhook.so -f entry <pid>
 
-# With entry point and argument
-sudo hsinject -p 1234 -l ./libhook.so -e my_init -a "config=debug"
+# With string argument
+sudo puck -l ./libhook.so -f my_init -d "config=debug" <pid>
 
-# Inject shellcode
-sudo hsinject -p 1234 -s ./payload.bin
+# Call function in already-loaded library
+sudo puck -c libc.so.6 -f puts -d "hello" <pid>
+```
 
-# Verbose output
-sudo hsinject -p 1234 -l ./libhook.so -v
+### As a library
+
+```rust
+use puck::inject_and_call;
+
+// Inject library and call function
+inject_and_call(pid, "/path/to/hook.so", "entry", None)?;
+
+// With string argument
+inject_and_call_with_string(pid, "/path/to/hook.so", "my_init", "config=debug")?;
 ```
 
 ## Building
 
 ```bash
-# Build all
-cargo build --release
+# Build
+make build
 
-# Build with musl
-cargo build --release --target x86_64-unknown-linux-musl
+# Build for aarch64
+make build-aarch64
 
-# Run tests (requires root)
-sudo cargo test -- --ignored
+# Run tests (QEMU)
+make test-x86_64
+make test-aarch64
 ```
 
 ## Architecture Support
 
 - [x] x86_64
-- [ ] aarch64
-- [ ] arm
-- [ ] x86
+- [x] aarch64
 
 ## License
 

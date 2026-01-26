@@ -1,0 +1,15 @@
+[project]
+name = "puck-tests"
+version = "0.1.0"
+description = "Integration tests for Puck library injector"
+requires-python = ">=3.10"
+dependencies = [
+    "pytest>=7.0.0",
+    "pexpect>=4.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

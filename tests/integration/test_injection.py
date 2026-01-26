@@ -1,5 +1,5 @@
 """
-Integration tests for hsinject
+Integration tests for puck
 
 Tests the Frida-style two-stage injection:
 1. Inject library and call entry function
@@ -17,7 +17,7 @@ from pathlib import Path
 # Paths
 TEST_DIR = Path(__file__).parent
 PROJECT_ROOT = TEST_DIR.parent.parent
-HSINJECT_BIN = PROJECT_ROOT / "target" / "release" / "hsinject"
+HSINJECT_BIN = PROJECT_ROOT / "target" / "release" / "puck"
 LIBHELLO_SO = TEST_DIR / "libhello.so"
 
 
@@ -40,15 +40,15 @@ class TestInjection:
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        """Build the test library and hsinject binary"""
-        # Build hsinject
+        """Build the test library and puck binary"""
+        # Build puck
         result = subprocess.run(
             ["cargo", "build", "--release"],
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, f"Failed to build hsinject: {result.stderr}"
+        assert result.returncode == 0, f"Failed to build puck: {result.stderr}"
 
         # Build libhello.so
         result = subprocess.run(

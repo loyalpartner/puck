@@ -1,0 +1,13 @@
+# VM images (large, downloaded)
+images/*.qcow2
+
+# Build artifacts
+labrats/*-x86_64
+labrats/*-aarch64
+payloads/*-x86_64.so
+payloads/*-aarch64.so
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/

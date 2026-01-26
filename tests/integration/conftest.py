@@ -1,5 +1,5 @@
 """
-Pytest configuration for hsinject integration tests
+Pytest configuration for puck integration tests
 """
 
 import pytest

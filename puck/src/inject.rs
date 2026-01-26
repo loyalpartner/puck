@@ -69,7 +69,7 @@ fn canonicalize_path(library_path: &Path) -> Result<String> {
 /// # Example
 /// ```no_run
 /// use std::path::Path;
-/// use hsinject::inject_library;
+/// use puck::inject_library;
 ///
 /// let result = inject_library(1234, Path::new("/path/to/library.so")).unwrap();
 /// println!("Injected! handle = 0x{:x}", result.handle);
@@ -134,7 +134,7 @@ fn inject_impl(
 /// # Example
 /// ```no_run
 /// use std::path::Path;
-/// use hsinject::inject_and_call;
+/// use puck::inject_and_call;
 ///
 /// let result = inject_and_call(
 ///     1234,
@@ -167,7 +167,7 @@ pub fn inject_and_call(
 /// # Example
 /// ```no_run
 /// use std::path::Path;
-/// use hsinject::inject_and_call_with_string;
+/// use puck::inject_and_call_with_string;
 ///
 /// let result = inject_and_call_with_string(
 ///     1234,
@@ -200,7 +200,7 @@ pub fn inject_and_call_with_string(
 ///
 /// # Example
 /// ```no_run
-/// use hsinject::call_in_loaded_library;
+/// use puck::call_in_loaded_library;
 ///
 /// // Call unload in a previously injected library
 /// call_in_loaded_library(1234, "libpayload.so", "unload", None).unwrap();
