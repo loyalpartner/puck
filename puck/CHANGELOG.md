@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/loyalpartner/puck/compare/v0.3.0...v0.4.0) (2026-01-26)
+
+
+### Features
+
+* **puck:** add dlopen keyword for better discoverability ([c48d727](https://github.com/loyalpartner/puck/commit/c48d7275c7e8376c036302d3dd7c7f62cdae389b))
+
 ## [0.3.0](https://github.com/loyalpartner/puck/compare/v0.2.0...v0.3.0) (2026-01-26)
 
 
