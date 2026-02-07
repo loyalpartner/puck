@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/loyalpartner/puck/compare/v0.4.0...v0.4.1) (2026-02-07)
+
+
+### Bug Fixes
+
+* **puck:** handle injection into undumpable processes ([065c259](https://github.com/loyalpartner/puck/commit/065c2599c6eae449c72525678322a49d0ec50998))
+* **puck:** handle injection into undumpable processes (file capabilities) ([e8053a3](https://github.com/loyalpartner/puck/commit/e8053a38cb70daad53f1780a40aa77ba4febcd0e))
+
 ## [0.4.0](https://github.com/loyalpartner/puck/compare/v0.3.0...v0.4.0) (2026-01-26)
 
 
