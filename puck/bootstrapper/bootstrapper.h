@@ -86,8 +86,14 @@ typedef struct {
     /* Resolved libc APIs (for debugging/advanced use) */
     LibcApi libc;
 
+    /* Fallback: injector-provided AT_PHDR pointer (when /proc/self/auxv is inaccessible) */
+    uint64_t fallback_phdr;
+
+    /* Fallback: injector-provided AT_PHNUM value */
+    uint64_t fallback_phnum;
+
     /* Reserved for future use */
-    uint64_t _reserved[16];
+    uint64_t _reserved[14];
 } BootstrapContext;
 
 /* Link map structure (glibc) */

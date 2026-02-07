@@ -11,7 +11,7 @@ CC_aarch64 := aarch64-linux-gnu-gcc
 CFLAGS := -Wall -Wextra -O2
 LDFLAGS := -lpthread
 
-SOURCES := sleeper.c threaded.c
+SOURCES := sleeper.c threaded.c undumpable.c
 TARGETS_PIE := $(SOURCES:.c=-pie)
 TARGETS_NOPIE := $(SOURCES:.c=-nopie)
 ALL_TARGETS := $(TARGETS_PIE) $(TARGETS_NOPIE)

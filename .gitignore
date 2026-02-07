@@ -2,9 +2,9 @@
 /frida-core
 
 # Bootstrapper build artifacts
-/bootstrapper/*.o
-/bootstrapper/*.elf
-/bootstrapper/*.bin
+puck/bootstrapper/*.o
+puck/bootstrapper/*.elf
+puck/bootstrapper/*.bin
 
 # Python/uv
 .venv/

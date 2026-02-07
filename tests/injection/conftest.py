@@ -223,6 +223,15 @@ def labrat_threaded_pie(arch) -> Path:
 
 
 @pytest.fixture(scope="session")
+def labrat_undumpable_pie(arch) -> Path:
+    """Return path to undumpable-pie labrat."""
+    path = _get_labrat_path("undumpable-pie", arch)
+    if not path.exists():
+        pytest.skip(f"Labrat not found: {path}. Run: make -C tests/qemu/labrats all-{arch}")
+    return path
+
+
+@pytest.fixture(scope="session")
 def host_executor(arch) -> Generator[HostExecutor, None, None]:
     """Provide a HostExecutor for direct host execution."""
     executor = HostExecutor(arch)
@@ -276,6 +285,7 @@ def inject_library(
     function: str = "entry",
     data: str = None,
     timeout: int = 60,
+    sudo: bool = False,
 ) -> tuple[int, str]:
     """Run library injection and return (exit_code, output).
 
@@ -287,11 +297,13 @@ def inject_library(
         function: Function to call in the payload
         data: Optional data argument to pass
         timeout: Command timeout in seconds
+        sudo: Whether to run with sudo (needed for undumpable processes)
 
     Returns:
         Tuple of (exit_code, output)
     """
-    cmd = f"{puck_binary} -l {payload_path} -f {function}"
+    prefix = "sudo " if sudo else ""
+    cmd = f"{prefix}{puck_binary} -l {payload_path} -f {function}"
     if data:
         cmd += f' -d "{data}"'
     cmd += f" {pid}"

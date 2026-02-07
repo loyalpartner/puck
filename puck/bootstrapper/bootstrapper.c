@@ -381,15 +381,27 @@ static void *call_thread(void *arg) {
 __attribute__((section(".text.bootstrap")))
 __attribute__((visibility("default")))
 uint32_t bootstrap(BootstrapContext *ctx) {
-    if (!ctx)
+    if (!ctx) {
+        /* No context to write status to - just trap immediately */
+#if defined(__x86_64__)
+        __asm__ volatile ("int3");
+#elif defined(__aarch64__)
+        __asm__ volatile ("brk #0");
+#endif
         return BOOTSTRAP_AUXV_PARSE_FAILED;
+    }
 
-    /* Step 1: Parse /proc/self/auxv */
+    /* Step 1: Parse /proc/self/auxv to get AT_PHDR and AT_PHNUM */
     const Elf64_Phdr *phdr;
     size_t phnum;
-    if (!parse_auxv(&phdr, &phnum)) {
+
+    /* Check if injector provided fallback values in context */
+    if (ctx->fallback_phdr && ctx->fallback_phnum) {
+        phdr = (const Elf64_Phdr *)ctx->fallback_phdr;
+        phnum = ctx->fallback_phnum;
+    } else if (!parse_auxv(&phdr, &phnum)) {
         ctx->status = BOOTSTRAP_AUXV_PARSE_FAILED;
-        return ctx->status;
+        goto trap;
     }
 
     /* Step 2: Compute load bias */
@@ -399,14 +411,14 @@ uint32_t bootstrap(BootstrapContext *ctx) {
     RDebug *r_debug = find_r_debug(phdr, phnum, load_bias);
     if (!r_debug) {
         ctx->status = BOOTSTRAP_RDEBUG_NOT_FOUND;
-        return ctx->status;
+        goto trap;
     }
 
     /* Step 4: Find libc */
     uint64_t libc_base = find_libc(r_debug);
     if (!libc_base) {
         ctx->status = BOOTSTRAP_LIBC_NOT_FOUND;
-        return ctx->status;
+        goto trap;
     }
 
     /* Step 5: Find libpthread (for older glibc) */
@@ -415,7 +427,7 @@ uint32_t bootstrap(BootstrapContext *ctx) {
     /* Step 6: Resolve libc symbols */
     if (!resolve_libc_symbols(libc_base, pthread_base, &ctx->libc)) {
         ctx->status = BOOTSTRAP_SYMBOL_RESOLUTION_FAILED;
-        return ctx->status;
+        goto trap;
     }
 
     /* Step 7: Create loader/call thread based on mode */
@@ -439,7 +451,7 @@ uint32_t bootstrap(BootstrapContext *ctx) {
 
     if (ret != 0) {
         ctx->status = BOOTSTRAP_PTHREAD_FAILED;
-        return ctx->status;
+        goto trap;
     }
 
     /* Note: Thread is detached and will set ctx->status when done.
@@ -447,7 +459,10 @@ uint32_t bootstrap(BootstrapContext *ctx) {
      * The injector should wait a bit for the thread to complete. */
     ctx->status = BOOTSTRAP_SUCCESS;
 
-    /* Trap to return control to injector */
+trap:
+    /* Trap to return control to injector.
+     * ALL exit paths must come here - using ret would jump to 0x0
+     * since we have no valid return address on the stack. */
 #if defined(__x86_64__)
     __asm__ volatile ("int3");
 #elif defined(__aarch64__)
