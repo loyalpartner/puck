@@ -95,8 +95,12 @@ pub struct BootstrapContext {
     pub handle: u64,
     /// Resolved libc APIs
     pub libc: LibcApi,
+    /// Fallback: injector-provided AT_PHDR pointer
+    pub fallback_phdr: u64,
+    /// Fallback: injector-provided AT_PHNUM value
+    pub fallback_phnum: u64,
     /// Reserved
-    pub _reserved: [u64; 16],
+    pub _reserved: [u64; 14],
 }
 
 impl Default for BootstrapContext {
@@ -111,7 +115,9 @@ impl Default for BootstrapContext {
             _pad1: 0,
             handle: 0,
             libc: LibcApi::default(),
-            _reserved: [0; 16],
+            fallback_phdr: 0,
+            fallback_phnum: 0,
+            _reserved: [0; 14],
         }
     }
 }
@@ -176,6 +182,12 @@ impl BootstrapContext {
         bytes[offset..offset + 8].copy_from_slice(&self.libc.pthread_create.to_ne_bytes());
         offset += 8;
         bytes[offset..offset + 8].copy_from_slice(&self.libc.pthread_detach.to_ne_bytes());
+        offset += 8;
+
+        // Fallback fields
+        bytes[offset..offset + 8].copy_from_slice(&self.fallback_phdr.to_ne_bytes());
+        offset += 8;
+        bytes[offset..offset + 8].copy_from_slice(&self.fallback_phnum.to_ne_bytes());
 
         // Reserved bytes are already zero
         bytes
@@ -215,6 +227,11 @@ impl BootstrapContext {
             pthread_create: u64::from_ne_bytes(bytes[offset + 32..offset + 40].try_into().ok()?),
             pthread_detach: u64::from_ne_bytes(bytes[offset + 40..offset + 48].try_into().ok()?),
         };
+        offset += 48;
+
+        let fallback_phdr = u64::from_ne_bytes(bytes[offset..offset + 8].try_into().ok()?);
+        offset += 8;
+        let fallback_phnum = u64::from_ne_bytes(bytes[offset..offset + 8].try_into().ok()?);
 
         Some(Self {
             mode,
@@ -226,7 +243,9 @@ impl BootstrapContext {
             _pad1,
             handle,
             libc,
-            _reserved: [0; 16],
+            fallback_phdr,
+            fallback_phnum,
+            _reserved: [0; 14],
         })
     }
 

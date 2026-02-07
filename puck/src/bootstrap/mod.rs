@@ -62,6 +62,45 @@ fn write_string(proc: &TracedProcess, addr: u64, s: &str) -> Result<()> {
     proc.write_memory(addr, &bytes)
 }
 
+/// Auxiliary vector entry types (from elf.h)
+const AT_NULL: u64 = 0;
+const AT_PHDR: u64 = 3;
+const AT_PHNUM: u64 = 5;
+
+/// Size of a single auxv entry: two u64 values (type + value)
+const AUXV_ENTRY_SIZE: usize = std::mem::size_of::<u64>() * 2;
+
+/// Read AT_PHDR and AT_PHNUM from /proc/PID/auxv (from injector side)
+///
+/// This is needed when the target process cannot read its own /proc/self/auxv
+/// (e.g., processes with file capabilities like cap_sys_nice make /proc/PID/*
+/// owned by root, causing EACCES from within the process).
+fn read_auxv_from_proc(pid: i32) -> Option<(u64, u64)> {
+    let path = format!("/proc/{}/auxv", pid);
+    let data = std::fs::read(&path).ok()?;
+
+    let mut phdr: u64 = 0;
+    let mut phnum: u64 = 0;
+
+    for chunk in data.chunks_exact(AUXV_ENTRY_SIZE) {
+        let a_type = u64::from_ne_bytes(chunk[0..8].try_into().ok()?);
+        let a_val = u64::from_ne_bytes(chunk[8..16].try_into().ok()?);
+
+        match a_type {
+            AT_NULL => break,
+            AT_PHDR => phdr = a_val,
+            AT_PHNUM => phnum = a_val,
+            _ => {}
+        }
+    }
+
+    if phdr != 0 && phnum != 0 {
+        Some((phdr, phnum))
+    } else {
+        None
+    }
+}
+
 /// Parameters for bootstrap execution
 struct BootstrapParams<'a> {
     library_or_pattern: &'a str,
@@ -110,10 +149,19 @@ fn execute_bootstrap(
 
     // Initialize context
     let arg_ptr = if params.argument.is_some() { arg_addr } else { 0 };
-    let ctx = match params.mode {
+    let mut ctx = match params.mode {
         BootstrapMode::Load => BootstrapContext::new_load(path_addr, func_addr, arg_ptr),
         BootstrapMode::Call => BootstrapContext::new_call(path_addr, func_addr, arg_ptr),
     };
+
+    // Read auxv from injector side and provide as fallback.
+    // This handles processes with file capabilities (e.g., sway with cap_sys_nice)
+    // where /proc/self/auxv is root-owned and inaccessible from within the process.
+    if let Some((phdr, phnum)) = read_auxv_from_proc(proc.pid.as_raw()) {
+        ctx.fallback_phdr = phdr;
+        ctx.fallback_phnum = phnum;
+    }
+
     proc.write_memory(ctx_addr, &ctx.to_bytes())?;
 
     eprintln!(
@@ -125,6 +173,12 @@ fn execute_bootstrap(
         params.library_or_pattern, path_addr
     );
     eprintln!("[debug] function: {} @ 0x{:x}", params.function_name, func_addr);
+    if ctx.fallback_phdr != 0 {
+        eprintln!(
+            "[debug] fallback auxv: phdr=0x{:x}, phnum={}",
+            ctx.fallback_phdr, ctx.fallback_phnum
+        );
+    }
 
     // Set up registers for execution (architecture-specific)
     let mut regs = proc.saved_regs;
@@ -204,9 +258,28 @@ fn execute_bootstrap(
                     );
                 }
             }
+            // Read back context to see how far bootstrapper got before crash
+            let crash_status = if let Ok(ctx_bytes) =
+                proc.read_memory(ctx_addr, CONTEXT_SIZE as usize)
+            {
+                if let Some(ctx) = BootstrapContext::from_bytes(&ctx_bytes) {
+                    let status = ctx.get_status();
+                    eprintln!("[debug] context status at crash: {:?}", status);
+                    eprintln!(
+                        "[debug] libc ptrs: dlopen=0x{:x} dlsym=0x{:x} pthread_create=0x{:x}",
+                        ctx.libc.dlopen, ctx.libc.dlsym, ctx.libc.pthread_create
+                    );
+                    status
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             proc.setregs(proc.saved_regs)?;
+            let status = crash_status.unwrap_or(BootstrapStatus::AuxvParseFailed);
             Err(Error::BootstrapFailed {
-                status: BootstrapStatus::AuxvParseFailed,
+                status,
                 message: format!("{} crashed with signal: {:?}", params.mode_label, sig),
             })
         }
