@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/loyalpartner/puck/compare/v0.4.2...v0.4.3) (2026-08-16)
+
+
+### Bug Fixes
+
+* **puck:** prefer a dedicated cross-gcc over CC_&lt;target&gt; for the bootstrapper ([f78f014](https://github.com/loyalpartner/puck/commit/f78f014dbd3f0ef23a048c39d5a6350b7f134e62))
+
 ## [0.4.2](https://github.com/loyalpartner/puck/compare/v0.4.1...v0.4.2) (2026-08-16)
 
 
