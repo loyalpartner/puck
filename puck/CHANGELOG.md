@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/loyalpartner/puck/compare/v0.4.1...v0.4.2) (2026-08-16)
+
+
+### Bug Fixes
+
+* **puck:** support cross-compiling x86_64 bootstrapper from non-x86 hosts ([8f0de2c](https://github.com/loyalpartner/puck/commit/8f0de2caaff92841188a8f423a083b22131d2d40))
+
 ## [0.4.1](https://github.com/loyalpartner/puck/compare/v0.4.0...v0.4.1) (2026-02-07)
 
 
