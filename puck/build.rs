@@ -93,15 +93,33 @@ fn cross_tool_overrides(target_arch: &str, bootstrap_arch: &str) -> Vec<(&'stati
 }
 
 /// Resolve a working x86_64 C compiler when cross-compiling. Priority:
-/// 1. The same override convention as the `cc` crate (cc-rs), so this
-///    composes with existing cross setups — including this project's own
-///    `cargo zigbuild` targets, which set `CC_<target>` to a `zig cc
-///    -target ...` wrapper.
-/// 2. Auto-probe the common Debian/Ubuntu cross package name.
+/// 1. Auto-probe the dedicated Debian/Ubuntu cross package. Preferred over
+///    any `CC_<target>` override: the bootstrapper is `-nostdlib` freestanding
+///    code, so it only needs a complete set of system headers (e.g. `elf.h`)
+///    and doesn't care about glibc vs musl ABI. A full binutils+gcc cross
+///    toolchain reliably has those headers; `zig cc` does not add its musl
+///    include path under `-nostdlib`, so a project-wide `CC_x86_64_unknown_linux_musl`
+///    aimed at `ring`/rustls (set by e.g. `cargo zigbuild`) would otherwise
+///    hijack this crate's build and fail on `elf.h` not found.
+/// 2. The same override convention as the `cc` crate (cc-rs) — only used as
+///    a fallback when no dedicated cross-gcc is installed, so an explicit
+///    `CC_<target>` (including a zig wrapper) still works in that case.
 /// 3. Fail loud with an actionable message — silently falling back to plain
 ///    `gcc` here would resurface the exact confusing "unrecognized
 ///    command-line option '-m64'" failure this exists to fix.
 fn resolve_cc() -> String {
+    const CANDIDATE: &str = "x86_64-linux-gnu-gcc";
+    let found = Command::new(CANDIDATE)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if found {
+        return CANDIDATE.to_string();
+    }
+
     let target = env::var("TARGET").unwrap_or_default();
     let target_env = target.replace('-', "_");
     for key in [
@@ -115,18 +133,6 @@ fn resolve_cc() -> String {
                 return v;
             }
         }
-    }
-
-    const CANDIDATE: &str = "x86_64-linux-gnu-gcc";
-    let found = Command::new(CANDIDATE)
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    if found {
-        return CANDIDATE.to_string();
     }
 
     panic!(
